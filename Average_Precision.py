@@ -290,7 +290,7 @@ def calc_inter_ap(args, rec, prec):
 
 
 """get ap and map"""
-def calculate_ap(TEMP_FILE_PATH, results_files_path, gt_classes, args,
+def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                  gt_counter_per_class, counter_images_per_class):
     specific_iou_flagged = False
     if args.set_class_IoU is not None:
@@ -300,7 +300,7 @@ def calculate_ap(TEMP_FILE_PATH, results_files_path, gt_classes, args,
     ap_dictionary = {}
     lamr_dictionary = {}
     # open file to store the results
-    with open(results_files_path + "/results.txt", 'w') as results_file:
+    with open(result_path + "/results.txt", 'w') as results_file:
         results_file.write("# AP and precision/recall per class \n")
         count_true_positives = {}
         for class_index, class_name in enumerate(gt_classes):
