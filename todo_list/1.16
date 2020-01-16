@@ -1,0 +1,17 @@
+--------codes--------
+1. recall precision plot codes
+
+2. edit input file format (json 2 txt) codes
+
+3. codes for confidence threshold
+
+
+
+---------study---------
+1. check the mAP by altering the number of interpolation
+
+2. then check the relation between interpolation and mAP
+
+3. codes for confidence threshold
+
+4.  confidence threshold result -> counted as fp? or  not
