@@ -1,5 +1,6 @@
 """
 m_main = metric_main
+
 """
 
 
@@ -21,9 +22,9 @@ def get_configurations():
     parser.add_argument('--quiet', help="minimalistic console output.", action="store_true", default=True)
     parser.add_argument('--no_interpolation', help="interpolation no? yes?", default=False)
 
-    parser.add_argument('--na', '--no-animation', help="no animation is shown.", action="store_true")
-    parser.add_argument('--npl', '--noplot', dest='showPlot', action='store_false',
-                        help='no plot is shown during execution')
+    parser.add_argument('--draw_plot', help='plot', default = True)
+    parser.add_argument('--plot_save', help='save plot image or not', default=True)
+
     parser.add_argument('--data_path', type=str, help='data path', default=os.path.join('.', 'input'))
     # parser.add_argument('--size_threshold', type=int, help='image size(small, medium, large)', default=32)
 
@@ -40,3 +41,4 @@ if __name__ == "__m_main__":
     # DR_PATH = os.path.join(os.getcwd(), 'input', 'detection_results')
 
     AP.AP(configuration)
+    
