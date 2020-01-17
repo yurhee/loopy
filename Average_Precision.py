@@ -5,6 +5,8 @@ import json
 import sys
 import numpy as np
 from m_main import get_configurations
+import matplotlib.pyplot as plt
+
 
 args = get_configurations()
 
@@ -20,15 +22,6 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 GT_PATH = os.path.join(os.getcwd(), 'input', 'ground_truth')
 DR_PATH = os.path.join(os.getcwd(), 'input', 'detection_results')
-IMG_PATH = os.path.join(os.getcwd(), 'input', 'images-optional')
-
-# # image path
-# if os.path.exists(IMG_PATH):
-#     for dirpath, dirnames, files in os.walk(IMG_PATH):
-#         if not files:
-#             args.no_animation = True
-# else:
-#     args.no_animation = True
 
 
 # make temp path
@@ -42,16 +35,29 @@ result_path = "result_file"
 if os.path.exists(result_path):
     shutil.rmtree(result_path)
     os.makedirs(result_path)
-elif not os.path.exists(result_path):
+else:
     os.makedirs(result_path)
 
-# load all csv lists in ground_truth
+#make plot path
+plot_result_path = "plot_figures"
+if args.draw_plot:
+    if args.plot_save:
+        if os.path.exists(plot_result_path):
+            shutil.rmtree(plot_result_path)
+            os.makedirs(plot_result_path)
+        else:
+            os.makedirs(plot_result_path)
+
+
+# load all txt lists in ground_truth
 ground_truth_files_list = glob(GT_PATH + '/*.txt')
 ground_truth_files_list.sort()
 
 # load all detection_result files
 dr_files_list = glob(DR_PATH + '/*.txt')
 dr_files_list.sort()
+
+
 
 """ Convert the rows of a txt!! file to list """
 def file_lines_to_list(path):
@@ -62,14 +68,17 @@ def file_lines_to_list(path):
     content = [x.strip() for x in content]
     return content
 
+
 '''ignore'''
 if args.ignore is None:
     args.ignore = []
+
 
 """error msg"""
 def error(msg):
     print(msg)
     sys.exit(0)
+
 
 """check the range of figure"""
 def is_float_between_0_and_1(value):
@@ -203,12 +212,18 @@ def check_format_class_iou(args, gt_classes):
             error('Error, IOU must be between 0 and 1. Flag usage:' + error_msg)
 
 
+
+
+
 """
 2. calculattion part
 """
 
 """Overall Calculation Frame"""
 def voc_ap(rec, prec):
+    global mrec
+    global mpre
+
     rec.insert(0, 0.0)  # insert 0.0 at beginning of list
     rec.append(1.0)  # insert 1.0 at end of list
     mrec = rec[:]
@@ -230,36 +245,12 @@ def voc_ap(rec, prec):
     ap = 0.0
     for i in i_list:
         ap += ((mrec[i]-mrec[i-1])*mpre[i]) #intergrating version, no need ap_sum, just ap
+
     return ap, mrec, mpre
 
 
 """
-calculate fp, tp, prec, rec
-"""
-def compute_pre_rec(fp, tp, class_name, gt_counter_per_class):
-    cumsum = 0
-    for idx, val in enumerate(fp):
-        fp[idx] += cumsum
-        cumsum += val
-
-    cumsum = 0
-    for idx, val in enumerate(tp):
-        tp[idx] += cumsum
-        cumsum += val
-
-    rec = tp[:]
-    for idx, val in enumerate(tp):
-        rec[idx] = float(tp[idx] / gt_counter_per_class[class_name])
-
-    prec = tp[:]
-    for idx, val in enumerate(tp):
-        prec[idx] = float(tp[idx] / (fp[idx] + tp[idx]))
-
-    return rec, prec
-
-
-"""
-interpolation
+interpolation preset
 """
 def calc_interpolated_prec(desired_rec, latest_pre, rec, prec):
     recall_precision = np.array([rec, prec])
@@ -289,6 +280,7 @@ def calc_inter_ap(args, rec, prec):
     return np.array(inter_precisions).mean()
 
 
+
 """get ap and map"""
 def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                  gt_counter_per_class, counter_images_per_class):
@@ -297,11 +289,9 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
         specific_iou_flagged = True
 
     sum_AP = 0.0
-    ap_dictionary = {}
-    lamr_dictionary = {}
     # open file to store the results
     with open(result_path + "/results.txt", 'w') as results_file:
-        results_file.write("# AP and precision/recall per class \n")
+        results_file.write("-----AP and precision/recall per class----- \n")
         count_true_positives = {}
         for class_index, class_name in enumerate(gt_classes):
             count_true_positives[class_name] = 0
@@ -373,32 +363,86 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                 else:
                     fp[idx] = 1
 
-            rec, prec = compute_pre_rec(fp, tp, class_name, gt_counter_per_class)
+            cumsum = 0
+            for idx, val in enumerate(fp):
+                fp[idx] += cumsum
+                cumsum += val
+
+            cumsum = 0
+            for idx, val in enumerate(tp):
+                tp[idx] += cumsum
+                cumsum += val
+
+            rec = tp[:]
+            for idx, val in enumerate(tp):
+                rec[idx] = float(tp[idx] / gt_counter_per_class[class_name])
+
+            prec = tp[:]
+            for idx, val in enumerate(tp):
+                prec[idx] = float(tp[idx] / (fp[idx] + tp[idx]))
+
+            # rec, prec = compute_pre_rec(fp, tp, class_name, gt_counter_per_class)
 
             if args.no_interpolation:
-                ap, mrec, mprec = voc_ap(rec[:], prec[:])
+                ap, mrec, mpre = voc_ap(rec[:], prec[:])
             else:
+                ap, mrec, mpre = voc_ap(rec[:], prec[:])
+                ap = 0.0
                 ap = calc_inter_ap(args, rec[:], prec[:])
-            # ap, mrec, mprec = voc_ap(rec[:], prec[:])
+            # ap, mrec, mpre = voc_ap(rec[:], prec[:])
+
+
             sum_AP += ap
             text = class_name + " AP " + " = " + "{0:.2f}%".format(ap * 100) # class_name + " AP = {0:.2f}%".format(ap*100)
             rounded_prec = ['%.2f' % elem for elem in prec]
             rounded_rec = ['%.2f' % elem for elem in rec]
             results_file.write(text + "\n Precision: " + str(rounded_prec) + "\n Recall :" + str(rounded_rec) + "\n\n")
 
+            # ap_dictionary[class_name] = ap
+
+            """Draw plot"""
+            if args.draw_plot:
+                plt.plot(rec, prec, '-o')
+                # add a new penultimate point to the list (mrec[-2], 0.0)
+                # since the last line segment (and respective area) do not affect the AP value
+                area_under_curve_x = mrec[:-1] + [mrec[-2]] + [mrec[-1]]
+                area_under_curve_y = mpre[:-1] + [0.0] + [mpre[-1]]
+                plt.fill_between(area_under_curve_x, 0, area_under_curve_y, alpha=0.2, edgecolor='r')
+
+                # set window title
+                fig = plt.gcf()  # gcf - get current figure
+                fig.canvas.set_window_title('AP ' + class_name)
+
+                # set plot title
+                plt.title('class: ' + text)
+                # plt.suptitle('This is a somewhat long figure title', fontsize=16)
+
+                # set axis titles
+                plt.xlabel('Recall')
+                plt.ylabel('Precision')
+
+                # optional - set axes
+                axes = plt.gca()  # gca - get current axes
+                axes.set_xlim([0.0, 1.0])
+                axes.set_ylim([0.0, 1.05])  # .05 to give some extra space
+                # Alternative option -> wait for button to be pressed
+                # while not plt.waitforbuttonpress(): pass # wait for key display
+                # Alternative option -> normal display
+                plt.show()
+
+                # save the plot
+                fig.savefig(os.path.join(plot_result_path, class_name +".png"))
+                # plt.cla()  # clear axes for next plot
+
             if not args.quiet:
                 print(text)
-            ap_dictionary[class_name] = ap
-
-            n_images = counter_images_per_class[class_name]
-            # lamr, mr, fppi = log_average_miss_rate(np.array(rec), np.array(fp), n_images)
-            # lamr_dictionary[class_name] = lamr
 
         results_file.write("\n-----mAP of all classes-----\n")
         mAP = sum_AP / len(gt_classes)
         text = "mAP = {0:.2f}%".format(mAP*100)
         results_file.write(text + "\n")
         print(text)
+
     return count_true_positives
 
 
@@ -412,8 +456,6 @@ gt_classes = sorted(gt_classes)
 n_classes = len(gt_classes)
 
 load_dr_into_json(GT_PATH, dr_files_list, TEMP_FILES_PATH, gt_classes)
-
-
 
 
 '''Count total of detection-results'''
@@ -439,24 +481,6 @@ if args.set_class_IoU is not None:
     check_format_class_iou(gt_classes)
 
 
-
-
-# """Plot - adjust axes"""
-# def adjust_axes(r, t, fig, axes):
-#     # get text width for re-scaling
-#     bb = t.get_window_extent(rendered=r)
-#     text_width_inches = bb.width / fig.dpi
-#     # get axis width in inches
-#     current_fig_width = fig.get_figwidth()
-#     new_fig_width = current_fig_width + text_width_inches
-#     propotion = new_fig_width / current_fig_width
-#
-#     # get axis limit
-#     x_lim = axes.get_xlim()
-#     axes.set_xlim([x_lim[0], x_lim[1]*propotion])
-
-
-
 '''Write num of gt object per classes to results.txt'''
 with open(result_path + "/results.txt", 'a') as results_file:
     results_file.write("\n----- Number of gt objects per class-----\n")
@@ -480,7 +504,6 @@ with open(result_path + "/results.txt", 'a') as results_file:
         text += " (tp:" + str(count_true_positives[class_name]) + ""
         text += ", fp:" + str(n_det - count_true_positives[class_name]) + ")\n"
         results_file.write(text)
-
 
 
 shutil.rmtree(TEMP_FILES_PATH)
