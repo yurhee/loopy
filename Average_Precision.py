@@ -1,14 +1,17 @@
 import os
-from glob import glob
 import shutil
 import json
 import sys
 import numpy as np
 from m_main import get_configurations
 import matplotlib.pyplot as plt
+import pandas as pd
 
+# from glob import glob
 
 args = get_configurations()
+
+
 
 """ composed of 3 parts = file preset, calculation, results"""
 
@@ -20,8 +23,8 @@ args = get_configurations()
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # make sure that the cwd() is the location of the python script (so that every path makes sense)
 
-GT_PATH = os.path.join(os.getcwd(), 'input', 'ground_truth')
-DR_PATH = os.path.join(os.getcwd(), 'input', 'detection_results')
+gt_json_path = 'C:/Users/Medical-Information/PycharmProjects/project_metric/input/ground_truth/ground_truth.json'
+dr_json_path = 'C:/Users/Medical-Information/PycharmProjects/project_metric/input/detection_results/detection_results.json'
 
 
 # make temp path
@@ -48,25 +51,6 @@ if args.draw_plot:
         else:
             os.makedirs(plot_result_path)
 
-
-# load all txt lists in ground_truth
-ground_truth_files_list = glob(GT_PATH + '/*.txt')
-ground_truth_files_list.sort()
-
-# load all detection_result files
-dr_files_list = glob(DR_PATH + '/*.txt')
-dr_files_list.sort()
-
-
-
-""" Convert the rows of a txt!! file to list """
-def file_lines_to_list(path):
-    # open txt file lines to a list
-    with open(path) as f:
-        content = f.readlines()
-    # remove whitespace characters like '\n' at the end of each line
-    content = [x.strip() for x in content]
-    return content
 
 
 '''ignore'''
@@ -95,41 +79,34 @@ def is_float_between_0_and_1(value):
 '''load ground truth files and elements
     Load each of the ground-truth files into a temporary ".json" file
 '''
-def get_gt_lists(GT_PATH, DR_PATH, TEMP_FILES_PATH, args):
-    if len(ground_truth_files_list) == 0:
-        error("Error: There is no gt file in GT_PATH")
-    ground_truth_files_list.sort()
-
-    # count element
-    gt_counter_per_class = {}
-    counter_images_per_classes = {}
-
-    for txt_file in ground_truth_files_list:
-        # example file name = 2007_00027.txt
-        file_id = txt_file.split(".txt", 1)[0]  # 2007_00027
-        file_id = os.path.basename(os.path.normpath(file_id))  # set as path
-        temp_path = os.path.join(DR_PATH, (file_id + ".txt"))
-
-        if not os.path.exists(temp_path):
-            error_msg = "there is no detection results matched gt file: {}\n".format(temp_path)
-            error(error_msg)
-        lines_list = file_lines_to_list(txt_file)  # gt file's row --> list
-
-        # create gt dictionary
+def get_gt_lists(gt_json_path, TEMP_FILES_PATH, class_dict):
+    with open(gt_json_path) as json_file:
+        json_data = json.load(json_file)
+        gt_counter_per_class = {}
+        counter_images_per_classes = {}
+        json_annotations = json_data["annotations"]
+        json_annotations = sorted(json_annotations, key=lambda json_annotations: (json_annotations['image_id']))
+        df = pd.DataFrame(json_annotations)
+        file_id = str(df["image_id"][0])
         bounding_boxes = []
         already_seen_classes = []
 
-        for line in lines_list:
-            try:
-                class_name, left, top, right, bottom = line.split()
-            except ValueError:
-                error_msg = "Error: file" + txt_file + "in the wrong format.\n"
-                error(error_msg)
-            if class_name in args.ignore:
-                continue
-            bbox = left + " " + top + " " + right + " " + bottom
-            bounding_boxes.append({"class_name": class_name, "bbox": bbox, "used": False})
+        for idx, row in df.iterrows():
+            # gt 파일명에 따라 이 부분 수정해야 함
+            new_file_id = str(row["image_id"])
+            category_id = row["category_id"]
+            class_name = class_dict[str(category_id)]
 
+            if new_file_id != file_id:
+                with open(TEMP_FILES_PATH + "/" + file_id+"_ground_truth.json", "w") as outfile:
+                    json.dump(bounding_boxes, outfile)
+                bounding_boxes = []
+
+            # create gt dictionary
+            left, top, width, height = str(row["bbox"][0]), str(row["bbox"][1]), str(row["bbox"][2]), str(
+                row["bbox"][3])
+            bbox = left + " " + top + " " + width + " " + height
+            bounding_boxes.append({"class_name": class_name, "bbox": bbox, "used":False})
             # count how many gts are in one class(dictionary)
             if class_name in gt_counter_per_class:
                 gt_counter_per_class[class_name] += 1
@@ -146,48 +123,57 @@ def get_gt_lists(GT_PATH, DR_PATH, TEMP_FILES_PATH, args):
                     counter_images_per_classes[class_name] = 1
                 already_seen_classes.append(class_name)
 
+            file_id = str(row['image_id'])
+
         with open(TEMP_FILES_PATH + "/" + file_id + "_ground_truth.json", "w") as outfile:
             json.dump(bounding_boxes, outfile)
 
     return gt_counter_per_class, counter_images_per_classes
 
 
+"""get gt lists"""
+def make_gt_list(gt_json_path):
+    class_dict = dict()
+    with open(gt_json_path) as json_file:
+        json_data = json.load(json_file)
+        json_categories = json_data["categories"]
+        category_df = pd.DataFrame(json_categories)
 
-"""
- detection-results
-     Load each of the detection-results files into a temporary ".json" file.
-"""
-def load_dr_into_json(GT_PATH, dr_files_list, TEMP_FILE_PATH, gt_classes):
-    for class_index, class_name in enumerate(gt_classes):
-        bounding_boxes = []
-        for txt_file in dr_files_list:
-            # the first time it checks if all the corresponding ground truth files exist
-            file_id = txt_file.split(".txt", 1)[0]
-            file_id = os.path.basename(os.path.normpath(file_id))
-            temp_path = os.path.join(GT_PATH, (file_id + ".txt"))
-            if class_index == 0:
-                if not os.path.exists(temp_path):
-                    error_msg = "Error. File not found: {}\n".format(temp_path)
-                    error(error_msg)
-            lines = file_lines_to_list(txt_file)
+        for idx, row in category_df.iterrows():
+            category_id = str(row["id"])
+            category_name = row.get("name")
+            class_dict[category_id] = category_name
+    return class_dict
 
-            for line in lines:
-                try:
-                    tmp_class_name, confidence, left, top, right, bottom = line.split()
-                except ValueError:
-                    error_msg = "Error: File " + txt_file + " in the wrong format.\n"
-                    error_msg += " Expected: <class_name> <confidence> <left> <top> <right> <bottom>\n"
-                    error_msg += " Received: " + line
-                    error(error_msg)
-                if tmp_class_name == class_name:
-                    # match
-                    bbox = left + " " + top + " " + right + " " + bottom
-                    bounding_boxes.append({"confidence": confidence, "file_id": file_id, "bbox": bbox})
 
-        bounding_boxes.sort(key=lambda x: float(x['confidence']), reverse=True)
+def dr_json(dr_json_path, temp_file_path, class_dict):
+    det_counter_per_classes = {}
+    with open(dr_json_path) as origin_dr_path:
+        json_data = json.load(origin_dr_path)
+        json_annotations = json_data["annotations"]
+        json_annotations = sorted(json_annotations, key=lambda json_annotations:(json_annotations['category_id']))
+        df = pd.DataFrame(json_annotations)
+        for key, value in class_dict.items():
+            bounding_boxes = []
+            for idx, row in df.iterrows():
+                image_id = str(row['image_id'])
+                if str(row['category_id']) == str(key):
+                    tmp_class_name, confidence = value, row['score']
+                    left, top, width, height = str(row["bbox"][0]), str(row["bbox"][1]),\
+                                               str(row["bbox"][2]), str(row["bbox"][3])
+                    if tmp_class_name in det_counter_per_classes:
+                        det_counter_per_classes[tmp_class_name] +=1
+                    else:
+                        det_counter_per_classes[tmp_class_name] = 1
+                    bbox = left + " " + top + " " + width + " " + height
+                    bounding_boxes.append({"confidence": confidence, "file_id": image_id, "bbox": bbox})
+            bounding_boxes.sort(key=lambda x: float(x['confidence']), reverse = True)
+            with open(temp_file_path + '/' + value + '_dr.json', 'w') as outfile:
+                json.dump(bounding_boxes, outfile)
 
-        with open(TEMP_FILE_PATH + "/" + class_name + "_dr.json", 'w') as outfile:
-            json.dump(bounding_boxes, outfile)
+    return det_counter_per_classes
+
+
 
 
 """
@@ -221,8 +207,6 @@ def check_format_class_iou(args, gt_classes):
 
 """Overall Calculation Frame"""
 def voc_ap(rec, prec):
-    global mrec
-    global mpre
 
     rec.insert(0, 0.0)  # insert 0.0 at beginning of list
     rec.append(1.0)  # insert 1.0 at end of list
@@ -281,7 +265,7 @@ def calc_inter_ap(args, rec, prec):
 
 
 
-"""get ap and map"""
+"""get ap and plot"""
 def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                  gt_counter_per_class, counter_images_per_class):
     specific_iou_flagged = False
@@ -289,6 +273,7 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
         specific_iou_flagged = True
 
     sum_AP = 0.0
+    ap_dictionary = {}
     # open file to store the results
     with open(result_path + "/results.txt", 'w') as results_file:
         results_file.write("-----AP and precision/recall per class----- \n")
@@ -315,7 +300,7 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                 gt_match = -1
                 # load detected object bounding-box
                 bb = [float(x) for x in detection["bbox"].split()]
-                confidence = float(detection["confidence"])
+                # confidence = float(detection["confidence"])
                 # if confidence < opt.confidence_threshold:
                 #    fp[idx] = 1
                 #    continue
@@ -325,13 +310,13 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                         bbgt = [float(x) for x in obj["bbox"].split()]
                         # 순서: left top right bottom
                         # bi = detection과 gt 중 교집합 box의 좌표
-                        bi = [max(bb[0], bbgt[0]), max(bb[1], bbgt[1]), min(bb[2], bbgt[2]), min(bb[3], bbgt[3])]
+                        bi = [max(bb[0], bbgt[0]), max(bb[1], bbgt[1]),
+                              min(bb[2]+bb[0], bbgt[2]+bbgt[0]), min(bb[3]+bb[1], bbgt[3])+bbgt[1]]
                         iw = bi[2] - bi[0] + 1
                         ih = bi[3] - bi[1] + 1
                         if iw > 0 and ih > 0:
                             # ua = compute overlap (IoU) = area of intersection/ area of union
-                            ua = ((bb[2] - bb[0] + 1) * (bb[3] - bb[1] + 1) + (bbgt[2] - bbgt[0] + 1)
-                                  * (bbgt[3] - bbgt[1] + 1)) - iw*ih
+                            ua = ((bb[2] + 1) * (bb[3] + 1) + (bbgt[2] + 1) * (bbgt[3] + 1)) - iw*ih
                             IoU = iw * ih / ua
                             if IoU > IoUmax:
                                 IoUmax = IoU
@@ -381,6 +366,7 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
             for idx, val in enumerate(tp):
                 prec[idx] = float(tp[idx] / (fp[idx] + tp[idx]))
 
+
             # rec, prec = compute_pre_rec(fp, tp, class_name, gt_counter_per_class)
 
             if args.no_interpolation:
@@ -398,7 +384,6 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
             rounded_rec = ['%.2f' % elem for elem in rec]
             results_file.write(text + "\n Precision: " + str(rounded_prec) + "\n Recall :" + str(rounded_rec) + "\n\n")
 
-            # ap_dictionary[class_name] = ap
 
             """Draw plot"""
             if args.draw_plot:
@@ -437,6 +422,8 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
             if not args.quiet:
                 print(text)
 
+            ap_dictionary[class_name] = ap
+
         results_file.write("\n-----mAP of all classes-----\n")
         mAP = sum_AP / len(gt_classes)
         text = "mAP = {0:.2f}%".format(mAP*100)
@@ -448,37 +435,19 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
 
 """3. making results part"""
 
+class_dict = make_gt_list(gt_json_path)
+gt_counter_per_class, counter_images_per_class = get_gt_lists(gt_json_path, TEMP_FILES_PATH, class_dict)
+det_counter_per_classes = dr_json(dr_json_path, TEMP_FILES_PATH, class_dict)
 
-gt_counter_per_class, counter_images_per_class = get_gt_lists(GT_PATH, DR_PATH, TEMP_FILES_PATH, args)
 
-gt_classes = list(gt_counter_per_class.keys())
-gt_classes = sorted(gt_classes)
+gt_classes = sorted(list(class_dict.values()))
 n_classes = len(gt_classes)
-
-load_dr_into_json(GT_PATH, dr_files_list, TEMP_FILES_PATH, gt_classes)
-
-
-'''Count total of detection-results'''
-det_counter_per_classes = {}
-for txt_file in dr_files_list:
-    # get lines to list
-    lines_list = file_lines_to_list(txt_file)
-    for line in lines_list:
-        class_name = line.split()[0]
-        # check if class is in the ignore list, if yes skip
-        if class_name in args.ignore:
-            continue
-        if class_name in det_counter_per_classes:
-            det_counter_per_classes[class_name] += 1
-        else:
-            # class did not exist yet
-            det_counter_per_classes[class_name] = 1
-
 dr_classes = list(det_counter_per_classes.keys())
 
 
-if args.set_class_IoU is not None:
-    check_format_class_iou(gt_classes)
+count_true_positives = calculate_ap(TEMP_FILES_PATH, result_path, gt_classes, args,
+                                    gt_counter_per_class, counter_images_per_class)
+
 
 
 '''Write num of gt object per classes to results.txt'''
@@ -487,8 +456,7 @@ with open(result_path + "/results.txt", 'a') as results_file:
     for class_name in sorted(gt_counter_per_class):
         results_file.write(class_name + ":" + str(gt_counter_per_class[class_name]) + "\n")
 
-count_true_positives = calculate_ap(TEMP_FILES_PATH, result_path, gt_classes, args,
-                                    gt_counter_per_class, counter_images_per_class)
+
 
 
 '''Finish counting tp'''
@@ -507,5 +475,3 @@ with open(result_path + "/results.txt", 'a') as results_file:
 
 
 shutil.rmtree(TEMP_FILES_PATH)
-
-
