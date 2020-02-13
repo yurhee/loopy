@@ -6,10 +6,14 @@ import numpy as np
 from m_main import get_configurations
 import matplotlib.pyplot as plt
 import pandas as pd
+import time
 
 # from glob import glob
 
 args = get_configurations()
+
+start = time.time()
+
 
 
 
@@ -87,6 +91,7 @@ def get_gt_lists(gt_json_path, TEMP_FILES_PATH, class_dict):
         json_annotations = json_data["annotations"]
         json_annotations = sorted(json_annotations, key=lambda json_annotations: (json_annotations['image_id']))
         df = pd.DataFrame(json_annotations)
+        df.drop(['iscrowd', 'color', 'metadata'], axis='columns', inplace=True)
         file_id = str(df["image_id"][0])
         bounding_boxes = []
         already_seen_classes = []
@@ -153,6 +158,8 @@ def dr_json(dr_json_path, temp_file_path, class_dict):
         json_annotations = json_data["annotations"]
         json_annotations = sorted(json_annotations, key=lambda json_annotations:(json_annotations['category_id']))
         df = pd.DataFrame(json_annotations)
+        df = df.drop(columns="segmentation")
+        df = df.drop(columns="id")
         for key, value in class_dict.items():
             bounding_boxes = []
             for idx, row in df.iterrows():
@@ -173,29 +180,6 @@ def dr_json(dr_json_path, temp_file_path, class_dict):
 
     return det_counter_per_classes
 
-
-
-
-"""
-check format
-"""
-def check_format_class_iou(args, gt_classes):
-    n_args = len(args.set_class_IoU)
-    error_msg = \
-        '\n --set-class-iou [class_1] [IoU_1] [class_2] [IoU_2] [...]'
-    if n_args % 2 != 0:
-        error('Error, missing arguments. Flag usage:' + error_msg)
-
-    specific_iou_classes = args.set_class_IoU[::2]  # even elements
-    iou_list = args.set_class_IoU[1::2]  # odd elements
-    if len(specific_iou_classes) != len(iou_list):
-        error('Error, missing arguments. Flag usage:' + error_msg)
-    for tmp_class in specific_iou_classes:
-        if tmp_class not in gt_classes:
-            error('Error, unknown class \"' + tmp_class + '\".Flag usage:' + error_msg)
-    for num in iou_list:
-        if not is_float_between_0_and_1(num):
-            error('Error, IOU must be between 0 and 1. Flag usage:' + error_msg)
 
 
 
@@ -268,9 +252,6 @@ def calc_inter_ap(args, rec, prec):
 """get ap and plot"""
 def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                  gt_counter_per_class, counter_images_per_class):
-    specific_iou_flagged = False
-    if args.set_class_IoU is not None:
-        specific_iou_flagged = True
 
     sum_AP = 0.0
     ap_dictionary = {}
@@ -311,7 +292,7 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                         # 순서: left top right bottom
                         # bi = detection과 gt 중 교집합 box의 좌표
                         bi = [max(bb[0], bbgt[0]), max(bb[1], bbgt[1]),
-                              min(bb[2]+bb[0], bbgt[2]+bbgt[0]), min(bb[3]+bb[1], bbgt[3])+bbgt[1]]
+                              min(bb[2]+bb[0], bbgt[2]+bbgt[0]), min(bb[3]+bb[1], bbgt[3]+bbgt[1])]
                         iw = bi[2] - bi[0] + 1
                         ih = bi[3] - bi[1] + 1
                         if iw > 0 and ih > 0:
@@ -325,12 +306,6 @@ def calculate_ap(TEMP_FILE_PATH, result_path, gt_classes, args,
                 # assign detection as true positive/false positive
                 # set minimum overlap threshold
                 IoU_th = args.IoU_th
-                if specific_iou_flagged:
-                    specific_iou_classes = args.set_class_IoU[::2]
-                    iou_list = args.set_class_IoU[1::2]
-                    if class_name in specific_iou_classes:
-                        index = specific_iou_classes.index(class_name)
-                        IoU_th = float(iou_list[index])
                 if IoUmax >= IoU_th:
                     if not bool(gt_match["used"]):
                         # true positive
@@ -475,3 +450,8 @@ with open(result_path + "/results.txt", 'a') as results_file:
 
 
 shutil.rmtree(TEMP_FILES_PATH)
+
+
+#time
+finish = time.time()
+print("time : ", finish - start)
