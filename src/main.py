@@ -34,7 +34,7 @@ if opt.draw_plot:
             os.makedirs(plot_result_path)
 
 
-final_result_path = "final_result"
+final_result_path = "final_result.json"
 if not os.path.exists(results_files_path):
     os.makedirs(results_files_path)
 else:
@@ -103,7 +103,7 @@ utils_map.print_configuration(result_file_path, opt)
 finish = time.time()
 print("time: ", finish - start)
 
-# print(ap_dictionary)
+
 
 """---------------------------------------------------"""
 
@@ -130,20 +130,17 @@ with open(final_result_path, 'w') as final_result_file:
                                      "precision": precision_dict[class_name],
                                      "recall": recall_dict[class_name]}
 
-    size_dict["ground_truth"] = {"small": gt_counter_per_size["small"],
-                                 "medium": gt_counter_per_size["medium"],
-                                 "large": gt_counter_per_size["large"]}
-    size_dict["prediction"] = {"small": size_count_true_positives["small"],
-                               "medium": size_count_true_positives["medium"],
-                               "large": size_count_true_positives["large"]}
+    size_dict["small"] = {"ground_truth": gt_counter_per_size["small"],
+                           "prediction": size_count_true_positives["small"]}
 
-    data["count"] = positive_dict
-    data["by scale"] = size_dict
+    size_dict["medium"] = {"ground_truth": gt_counter_per_size["medium"],
+                          "prediction": size_count_true_positives["medium"]}
+
+    size_dict["large"] = {"ground_truth": gt_counter_per_size["large"],
+                          "prediction": size_count_true_positives["large"]}
+
+
+    data["class_count"] = positive_dict
+    data["scale_count"] = size_dict
     json.dump(data, final_result_file)
 
-
-print(gt_counter_per_class)
-
-
-# for class_name in sorted(gt_counter_per_class):
-#     print(precision_dict[class_name])
