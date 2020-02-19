@@ -377,10 +377,14 @@ def calculate_ap(results_file_path, plot_result_path, gt_classes, opt, gt_counte
                 ap, mrec, mpre = voc_ap(rec[:], prec[:])
                 ap = calc_inter_ap(opt, rec[:], prec[:])
             sum_AP += ap
+
+            # print(mrec)
+
             text = "{0:.2f}%".format(
                 ap * 100) + " = " + class_name + " AP "  # class_name + " AP = {0:.2f}%".format(ap*100)
-            rounded_prec = ['%.2f' % elem for elem in prec]
-            rounded_rec = ['%.2f' % elem for elem in rec]
+            rounded_prec = ["%.2f" % elem for elem in prec]
+            rounded_rec = ["%.2f" % elem for elem in rec]
+
             if opt.see_pre_rec:
                 results_file.write(
                     text + "\n Precision: " + str(rounded_prec) + "\n Recall :" + str(rounded_rec) + "\n\n")
@@ -405,8 +409,10 @@ def calculate_ap(results_file_path, plot_result_path, gt_classes, opt, gt_counte
                 print(text)
 
             ap_dictionary[class_name] = ap
-            precision_dict[class_name] = str(rounded_prec)
-            recall_dict[class_name] = str(rounded_rec)
+            precision_dict[class_name] = str(prec)
+            recall_dict[class_name] = str(rec)
+
+            # print(precision_dict[class_name])
 
             texts = texts + class_name + " ap: "+ "{0:.2f}%".format(ap*100)  +"\n"
 
