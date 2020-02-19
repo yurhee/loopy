@@ -112,20 +112,23 @@ data["mAP"] = mAP
 data["IoU"] = opt.iou_threshold
 data["gt_path"] = gt_json_path
 data["dr_path"] = dr_json_path
+data["time"] = finish - start
 data["average precision"] = ap_dictionary
 positive_dict = {}
 size_dict = {}
 
 with open(final_result_path, 'w') as final_result_file:
     for class_name in sorted(gt_counter_per_class):
+        try: n_det = det_counter_per_classes[class_name]
+        except: n_det = 0
         if class_name not in det_counter_per_classes.keys():
             det_counter_per_classes[class_name] = 0
-        positive_dict[class_name] = {"tp" : count_true_positives[class_name],
-                                     "fp" : n_det - count_true_positives[class_name],
+        positive_dict[class_name] = {"tp" : str(count_true_positives[class_name]),
+                                     "fp" : str(n_det - count_true_positives[class_name]),
                                      "gt_count" : gt_counter_per_class[class_name],
-                                     "prediction_count" : det_counter_per_classes[class_name],
+                                     "prediction_count": det_counter_per_classes[class_name],
                                      "precision": precision_dict[class_name],
-                                     "recall":recall_dict[class_name]}
+                                     "recall": recall_dict[class_name]}
 
     size_dict["ground_truth"] = {"small": gt_counter_per_size["small"],
                                  "medium": gt_counter_per_size["medium"],
