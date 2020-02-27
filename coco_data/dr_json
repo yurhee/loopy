@@ -1,0 +1,32 @@
+def dr_json(dr_json_path, class_dict):
+    det_counter_per_classes = {}
+    dr_class = {}
+    for key, value in class_dict.items():
+        dr_class[value] = []
+    with open(dr_json_path) as origin_dr_path:
+        json_data = json.load(origin_dr_path)
+        df = pd.DataFrame(json_data)
+        df = df.drop(["segmentation"],axis=1)
+        # json_bbox = json_data["bbox"]
+        # json_category = json_data["category_id"]
+        # df = pd.DataFrame(json_bbox)
+        for idx, row in df.iterrows():
+            image_id = str(row['image_id'])
+            try:
+                class_name = class_dict[str(row["category_id"])]
+            except KeyError or ValueError:
+                error("No matching class name in gt. This category id  not exist in gt: " + row["category_id"])
+            confidence = row['score']
+            left, top, width, height = str(row["bbox"][0]), str(row["bbox"][1]), str(row["bbox"][2]), str(row["bbox"][3])
+            if class_name in det_counter_per_classes:
+                det_counter_per_classes[class_name] += 1
+            else:
+                det_counter_per_classes[class_name] = 1
+            bbox = left + " " + top + " " + width + " " + height
+            dr_class[class_name].append({"confidence": confidence, "file_id": image_id, "bbox": bbox})
+            #bounding_boxes.sort(key=lambda x: float(x['confidence']), reverse = True)
+
+    for key, value in class_dict.items():
+        dr_class[value].sort(key=lambda x: float(x['confidence']), reverse = True)
+
+    return det_counter_per_classes, dr_class
